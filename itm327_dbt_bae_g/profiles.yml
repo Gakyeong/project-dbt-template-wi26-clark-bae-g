@@ -7,7 +7,7 @@ itm327:
       user: 'not needed'
       role: TRAINING_ROLE
       database: SNOWBEARAIR_DB
-      schema: DEV
+      schema: RAW
       warehouse: ANIMAL_TASK_WH
     prod:
       type: snowflake
@@ -15,5 +15,5 @@ itm327:
       user: 'not needed'
       role: TRAINING_ROLE
       database: SNOWBEARAIR_DB
-      schema: PROD
+      schema: MODELED
       warehouse: ANIMAL_TASK_WH
