@@ -57,7 +57,7 @@ sources:
             description: Stock ticker symbol (e.g., AAPL, MSFT).
             tests:
               - not_null
-          - name: TRADE_DATE
+          - name: DATETIME
             description: The trading date for this record.
             tests:
               - not_null
@@ -110,3 +110,17 @@ sources:
             description: Total precipitation for the day (mm).
           - name: MAX_WIND
             description: Maximum wind speed for the day (km/h).
+          - name: APPT_MAX
+            description: Apparent maximum temperature (°C).
+          - name: APPT_MIN
+            description: Apparent minimum temperature (°C).
+          - name: APPT_TEMP_RANGE
+            description: Apparent temperature range (°C).
+          - name: TEMP_RANGE_C
+            description: Actual temperature range (°C).
+          - name: DAYLIGHT_DURATION
+            description: Total daylight duration in seconds.
+          - name: SUNRISE
+            description: Sunrise time (Unix timestamp).
+          - name: SUNSET
+            description: Sunset time (Unix timestamp).
