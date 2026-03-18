@@ -1,0 +1,122 @@
+def model(dbt, session):
+
+    import polars as pl
+
+    # Load warehouse tables
+    fact_stock = pl.from_pandas(dbt.ref("FACT_STOCK_BAE_G").to_pandas())
+    dim_stock = pl.from_pandas(dbt.ref("DIM_STOCK_BAE_G").to_pandas())
+    bridge_weather = pl.from_pandas(dbt.ref("BRIDGE_DAILY_WEATHER_BAE_G").to_pandas())
+    dim_weather = pl.from_pandas(dbt.ref("DIM_WEATHER_BAE_G").to_pandas())
+    bridge_news = pl.from_pandas(dbt.ref("BRIDGE_DAILY_NEWS_BAE_G").to_pandas())
+    dim_news = pl.from_pandas(dbt.ref("DIM_NEWS_BAE_G").to_pandas())
+
+    # -----------------------------
+    # 1. STOCK FEATURES
+    # -----------------------------
+    stock = (
+        fact_stock.join(dim_stock, on="stock_key", how="left")
+        .sort(["stock_key", "date_key"])
+        .with_columns([
+            ((pl.col("close_price") - pl.col("open_price")) / pl.col("open_price"))
+                .alias("daily_return"),
+
+            pl.col("daily_return").shift(1).alias("return_lag_1"),
+            pl.col("daily_return").shift(3).alias("return_lag_3"),
+            pl.col("daily_return").shift(5).alias("return_lag_5"),
+
+            pl.col("close_price").rolling_mean(5).alias("ma_5"),
+            pl.col("close_price").rolling_mean(20).alias("ma_20"),
+            pl.col("close_price").rolling_std(20).alias("vol_20"),
+        ])
+    )
+
+    # -----------------------------
+    # 2. WEATHER FEATURES
+    # -----------------------------
+    weather = (
+        bridge_weather.join(dim_weather, on="weather_key", how="left")
+        .sort(["city", "date_key"])
+        .with_columns([
+            pl.col("avg_temp").diff().alias("temp_change"),
+            pl.col("humidity").diff().alias("humidity_change"),
+        ])
+        .select([
+            "date_key", "city",
+            "avg_temp", "temp_change",
+            "humidity", "humidity_change",
+            "wind_speed", "precipitation",
+            "cloud_cover", "weather_condition"
+        ])
+    )
+
+    # -----------------------------
+    # 3. NEWS FEATURES (ONLY news_count)
+    # -----------------------------
+    news_daily = (
+        bridge_news.groupby("date_key")
+        .agg(pl.count().alias("news_count"))
+        .sort("date_key")
+        .with_columns([
+            pl.col("news_count").shift(1).alias("news_count_lag_1"),
+            pl.col("news_count").shift(3).alias("news_count_lag_3"),
+            pl.col("news_count").rolling_mean(5).alias("news_count_roll_5"),
+        ])
+    )
+
+    # -----------------------------
+    # 4. COMBINE STOCK + WEATHER + NEWS
+    # -----------------------------
+    combined = (
+        stock.join(weather, on="date_key", how="left")
+             .join(news_daily, on="date_key", how="left")
+    )
+
+    # -----------------------------
+    # 5. INTERACTION FEATURES
+    # -----------------------------
+    combined = combined.with_columns([
+        (pl.col("daily_return") * pl.col("avg_temp")).alias("return_x_temp"),
+        (pl.col("daily_return") * pl.col("news_count")).alias("return_x_news"),
+        (pl.col("vol_20") * pl.col("news_count")).alias("vol_x_news"),
+    ])
+
+    # -----------------------------
+    # 6. TARGET VARIABLE
+    # -----------------------------
+    combined = (
+        combined.sort(["stock_key", "date_key"])
+        .with_columns([
+            pl.col("daily_return").shift(-1).alias("next_day_return")
+        ])
+    )
+
+    # -----------------------------
+    # 7. Final ML-ready dataset
+    # -----------------------------
+    final = combined.select([
+        "date_key", "stock_key", "symbol", "city",
+
+        # Target
+        "next_day_return",
+
+        # Stock features
+        "daily_return",
+        "return_lag_1", "return_lag_3", "return_lag_5",
+        "ma_5", "ma_20", "vol_20",
+
+        # Weather features
+        "avg_temp", "temp_change",
+        "humidity", "humidity_change",
+        "wind_speed", "precipitation",
+        "cloud_cover", "weather_condition",
+
+        # News features (only what exists)
+        "news_count",
+        "news_count_lag_1", "news_count_lag_3",
+        "news_count_roll_5",
+
+        # Interaction features
+        "return_x_temp", "return_x_news", "vol_x_news",
+    ])
+
+    return final

@@ -9,12 +9,12 @@
 -- TODO: If your weather pipeline adds new columns (e.g., humidity,
 --       UV index), add them here so marts inherit them automatically.
 
-SELECT
-    DATE,
-    CITY,
-    MAX_TEMP,
-    MIN_TEMP,
-    PRECIP,
-    MAX_WIND
+-- SELECT
+--     DATE,
+--     CITY,
+--     MAX_TEMP,
+--     MIN_TEMP,
+--     PRECIP,
+--     MAX_WIND
 
-FROM {{ ref('raw_weather') }}
+-- FROM {{ ref('raw_weather') }}

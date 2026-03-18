@@ -8,21 +8,21 @@
 -- TODO: If you have access to a symbol reference table or API, join it here to add
 --       COMPANY_NAME, SECTOR, INDUSTRY, etc.
 
-SELECT
-    SYMBOL,
+-- SELECT
+--     SYMBOL,
 
-    -- Date range this symbol appears in your dataset
-    MIN(TRADE_DATE)  AS FIRST_SEEN_DATE,
-    MAX(TRADE_DATE)  AS LAST_SEEN_DATE,
-    COUNT(*)         AS TOTAL_TRADING_DAYS,
+--     -- Date range this symbol appears in your dataset
+--     MIN(TRADE_DATE)  AS FIRST_SEEN_DATE,
+--     MAX(TRADE_DATE)  AS LAST_SEEN_DATE,
+--     COUNT(*)         AS TOTAL_TRADING_DAYS,
 
-    -- Price range across the full history
-    MAX(HIGH)        AS ALL_TIME_HIGH,
-    MIN(LOW)         AS ALL_TIME_LOW,
-    AVG(CLOSE)       AS AVG_CLOSE_PRICE,
+--     -- Price range across the full history
+--     MAX(HIGH)        AS ALL_TIME_HIGH,
+--     MIN(LOW)         AS ALL_TIME_LOW,
+--     AVG(CLOSE)       AS AVG_CLOSE_PRICE,
 
-    -- Activity level (useful for filtering small/inactive tickers)
-    AVG(VOLUME)      AS AVG_DAILY_VOLUME
+--     -- Activity level (useful for filtering small/inactive tickers)
+--     AVG(VOLUME)      AS AVG_DAILY_VOLUME
 
-FROM {{ ref('raw_stocks') }}
-GROUP BY SYMBOL
+-- FROM {{ ref('raw_stocks') }}
+-- GROUP BY SYMBOL
