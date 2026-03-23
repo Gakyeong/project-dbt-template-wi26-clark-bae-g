@@ -1,8 +1,5 @@
 {{ config(materialized='table') }}
 
--- ============================================================
--- BASE PRICE + RETURNS
--- ============================================================
 with base as (
     select
         f.date_key,
@@ -20,21 +17,9 @@ with base as (
         on f.stock_key = d.stock_key
 ),
 
--- ============================================================
--- MOVING AVERAGES
--- ============================================================
 ma as (
     select
-        date_key,
-        stock_key,
-        symbol,
-        open_price,
-        close_price,
-        high_price,
-        low_price,
-        volume,
-        daily_return,
-        price_range,
+        *,
         avg(close_price) over (
             partition by stock_key order by date_key
             rows between 4 preceding and current row
@@ -46,28 +31,13 @@ ma as (
         avg(close_price) over (
             partition by stock_key order by date_key
             rows between 49 preceding and current row
-            ) as ma_50
+        ) as ma_50
     from base
 ),
 
--- ============================================================
--- VOLATILITY
--- ============================================================
 vol as (
     select
-        date_key,
-        stock_key,
-        symbol,
-        open_price,
-        close_price,
-        high_price,
-        low_price,
-        volume,
-        daily_return,
-        price_range,
-        ma_5,
-        ma_20,
-        ma_50,
+        *,
         stddev(daily_return) over (
             partition by stock_key order by date_key
             rows between 19 preceding and current row
@@ -75,25 +45,9 @@ vol as (
     from ma
 ),
 
--- ============================================================
--- MACD CALCULATION
--- ============================================================
 macd_calc as (
     select
-        date_key,
-        stock_key,
-        symbol,
-        open_price,
-        close_price,
-        high_price,
-        low_price,
-        volume,
-        daily_return,
-        price_range,
-        ma_5,
-        ma_20,
-        ma_50,
-        vol_20,
+        *,
         avg(close_price) over (
             partition by stock_key order by date_key
             rows between 11 preceding and current row
@@ -112,9 +66,6 @@ macd as (
     from macd_calc
 ),
 
--- ============================================================
--- RSI CALCULATION
--- ============================================================
 rsi_calc as (
     select
         *,
@@ -154,9 +105,6 @@ rsi_final as (
     from rsi
 ),
 
--- ============================================================
--- INDEX RETURNS (SPY)
--- ============================================================
 index_returns as (
     select
         f.date_key,
@@ -168,13 +116,10 @@ index_returns as (
     where d.symbol = 'SPY'
 ),
 
--- ============================================================
--- BETA CALCULATION
--- ============================================================
 beta_calc as (
     select
-        r.*,
-        i.index_return as idx_return,
+        *,
+        i.index_return,
         avg(r.daily_return) over (
             partition by r.stock_key order by r.date_key
             rows between 19 preceding and current row
@@ -191,13 +136,13 @@ beta_calc as (
 beta as (
     select
         *,
-        covar_samp(daily_return, idx_return) over (
+        covar_samp(daily_return, index_return) over (
             partition by stock_key order by date_key
             rows between 19 preceding and current row
         )
         /
         nullif(
-            var_samp(idx_return) over (
+            var_samp(index_return) over (
                 order by date_key
                 rows between 19 preceding and current row
             ),
@@ -206,9 +151,6 @@ beta as (
     from beta_calc
 ),
 
--- ============================================================
--- RISK METRICS
--- ============================================================
 risk as (
     select
         *,
@@ -232,9 +174,6 @@ risk as (
     from beta
 ),
 
--- ============================================================
--- PATTERNS
--- ============================================================
 patterns as (
     select
         *,
@@ -260,18 +199,18 @@ patterns as (
     from risk
 ),
 
--- ============================================================
--- PERFORMANCE METRICS
--- ============================================================
 perf as (
     select
         p.*,
+        -- 20-day rolling return
         (p.close_price /
          lag(p.close_price, 20) over (partition by p.stock_key order by p.date_key)
         ) - 1 as rolling_return_20,
+        -- cumulative return from first date
         (p.close_price /
          first_value(p.close_price) over (partition by p.stock_key order by p.date_key)
         ) - 1 as cumulative_return,
+        -- index rolling return (20-day)
         (i.index_close /
          lag(i.index_close, 20) over (order by p.date_key)
         ) - 1 as index_rolling_return_20
@@ -280,12 +219,10 @@ perf as (
         on p.date_key = i.date_key
 ),
 
--- ============================================================
--- SCORING
--- ============================================================
 scored as (
     select
         *,
+        -- base score from 0
         0
         + case when trend_direction = 'Uptrend' then 10 else 0 end
         + case when close_price > ma_50 then 10 else 0 end
@@ -300,9 +237,6 @@ scored as (
     from perf
 ),
 
--- ============================================================
--- FINAL OUTPUT
--- ============================================================
 final as (
     select
         *,
