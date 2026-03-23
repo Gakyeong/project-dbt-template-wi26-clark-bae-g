@@ -19,7 +19,7 @@ with src as (
         daylight_duration,
         temp_range_c
     from {{ ref('raw_weather') }}
-    where date is not null
+    where raw_date is not null
 )
 
 select
