@@ -14,5 +14,5 @@ select
 
     to_number(to_char(datetime, 'YYYYMMDD')) as date_key
 
-from {{ source('snowbearair', 'NEWS_API_BAE_G') }}
+from {{ source('raw_news') }}
 where datetime is not null

@@ -3,7 +3,7 @@ with src as (
     select
         id,
         datetime
-    from {{ source('snowbearair', 'NEWS_API_BAE_G') }}
+    from {{ source('raw_news') }}
     where datetime is not null
 ),
 
