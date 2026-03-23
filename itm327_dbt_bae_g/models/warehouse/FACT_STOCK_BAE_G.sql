@@ -12,7 +12,7 @@ with src as (
         low as low_price,
         close as close_price,
         volume
-    from {{ source('raw_stocks') }}
+    from {{ ref('raw_stocks') }}
     where datetime is not null
 ),
 

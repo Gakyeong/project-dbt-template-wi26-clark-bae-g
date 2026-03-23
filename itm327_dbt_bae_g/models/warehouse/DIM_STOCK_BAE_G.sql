@@ -3,5 +3,5 @@
 select
     dense_rank() over (order by symbol) as stock_key, -- integer, ordering, 
     symbol
-from {{ source('raw_stocks') }}
+from {{ ref('raw_stocks') }}
 group by symbol

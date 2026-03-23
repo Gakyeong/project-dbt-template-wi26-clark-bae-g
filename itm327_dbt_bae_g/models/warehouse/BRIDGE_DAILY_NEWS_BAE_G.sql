@@ -3,7 +3,7 @@ with src as (
     select
         id,
         datetime
-    from {{ source('raw_news') }}
+    from {{ ref('raw_news') }}
     where datetime is not null
 ),
 

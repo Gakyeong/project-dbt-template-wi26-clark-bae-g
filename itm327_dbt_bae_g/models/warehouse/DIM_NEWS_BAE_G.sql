@@ -14,5 +14,5 @@ select
 
     to_number(to_char(datetime, 'YYYYMMDD')) as date_key
 
-from {{ source('raw_news') }}
+from {{ ref('raw_news') }}
 where datetime is not null

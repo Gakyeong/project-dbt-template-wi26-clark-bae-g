@@ -18,7 +18,7 @@ with src as (
         sunset,
         daylight_duration,
         temp_range_c
-    from {{ source('raw_weather') }}
+    from {{ ref('raw_weather') }}
     where date is not null
 )
 

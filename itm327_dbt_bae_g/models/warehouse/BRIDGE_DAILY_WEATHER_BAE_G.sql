@@ -4,7 +4,7 @@ with src as (
     select
         to_number(to_char(to_date(date), 'YYYYMMDD')) as date_key,
         city
-    from {{ source('raw_weather') }}
+    from {{ ref('raw_weather') }}
     where date is not null
 ),
 
