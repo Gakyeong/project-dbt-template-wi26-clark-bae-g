@@ -100,7 +100,7 @@ rsi_final as (
         *,
         case
             when avg_loss = 0 then 100
-            else 100 - (100 / (1 + (avg_gain / nullif(avg_loss,0))))
+            else 100 - (100 / (1 + (avg_gain / nullif(avg_loss, 0))))
         end as rsi_14
     from rsi
 ),
@@ -118,16 +118,31 @@ index_returns as (
 
 beta_calc as (
     select
-        *,
+        r.*,
         i.index_return,
-        avg(r.daily_return) over (
-            partition by r.stock_key order by r.date_key
-            rows between 19 preceding and current row
-        ) as avg_stock_ret,
-        avg(i.index_return) over (
+        -- rolling sums for 20-day window
+        sum(r.daily_return) over (
+            partition by r.stock_key
             order by r.date_key
             rows between 19 preceding and current row
-        ) as avg_index_ret
+        ) as sum_stock_ret_20,
+        sum(i.index_return) over (
+            order by r.date_key
+            rows between 19 preceding and current row
+        ) as sum_index_ret_20,
+        sum(r.daily_return * i.index_return) over (
+            partition by r.stock_key
+            order by r.date_key
+            rows between 19 preceding and current row
+        ) as sum_stock_index_ret_20,
+        sum(i.index_return * i.index_return) over (
+            order by r.date_key
+            rows between 19 preceding and current row
+        ) as sum_index_sq_20,
+        count(i.index_return) over (
+            order by r.date_key
+            rows between 19 preceding and current row
+        ) as n_obs_20
     from rsi_final r
     left join index_returns i
         on r.date_key = i.date_key
@@ -136,18 +151,21 @@ beta_calc as (
 beta as (
     select
         *,
-        covar_samp(daily_return, index_return) over (
-            partition by stock_key order by date_key
-            rows between 19 preceding and current row
-        )
-        /
-        nullif(
-            var_samp(index_return) over (
-                order by date_key
-                rows between 19 preceding and current row
-            ),
-            0
-        ) as beta_20
+        case
+            when n_obs_20 >= 2
+                 and (sum_index_sq_20 - (sum_index_ret_20 * sum_index_ret_20) / n_obs_20) <> 0
+            then
+                (
+                    sum_stock_index_ret_20
+                    - (sum_stock_ret_20 * sum_index_ret_20) / n_obs_20
+                )
+                /
+                (
+                    sum_index_sq_20
+                    - (sum_index_ret_20 * sum_index_ret_20) / n_obs_20
+                )
+            else null
+        end as beta_20
     from beta_calc
 ),
 
@@ -211,43 +229,4 @@ perf as (
          first_value(p.close_price) over (partition by p.stock_key order by p.date_key)
         ) - 1 as cumulative_return,
         -- index rolling return (20-day)
-        (i.index_close /
-         lag(i.index_close, 20) over (order by p.date_key)
-        ) - 1 as index_rolling_return_20
-    from patterns p
-    left join index_returns i
-        on p.date_key = i.date_key
-),
-
-scored as (
-    select
-        *,
-        -- base score from 0
-        0
-        + case when trend_direction = 'Uptrend' then 10 else 0 end
-        + case when close_price > ma_50 then 10 else 0 end
-        + case when macd_line > 0 then 10 else 0 end
-        + case when rsi_14 between 50 and 65 then 10 else 0 end
-        + case when breakout_signal then 10 else 0 end
-        + case when rolling_return_20 > index_rolling_return_20 then 10 else 0 end
-        + case when sharpe_20 > 1 then 10 else 0 end
-        + case when drawdown > -0.10 then 10 else 0 end
-        + case when beta_20 is not null and beta_20 between 0 and 1.5 then 10 else 0 end
-        as score
-    from perf
-),
-
-final as (
-    select
-        *,
-        case
-            when score >= 70 then 'BUY'
-            when score >= 40 then 'HOLD'
-            else 'SELL'
-        end as recommendation
-    from scored
-)
-
-select *
-from final
-order by stock_key, date_key;
+        (

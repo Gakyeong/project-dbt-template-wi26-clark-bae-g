@@ -1,6 +1,6 @@
 -- TODO: Update the source table name to match your prefix (e.g., SMITHJ_WEATHER)
 select
-    "DATE" as raw_date,
+    DATE as raw_date,
     CITY,
     MAX_TEMP,
     MIN_TEMP,
