@@ -23,8 +23,8 @@ with src as (
 )
 
 select
-    {{ dbt_utils.generate_surrogate_key(['city', 'date_key']) }} as weather_key,
-    * --no natual key, having two with surrogate_key, incremental
+    sha2(city || '-' || date_key, 256) as weather_key,
+    *
 from src
 
 {% if is_incremental() %}
