@@ -1,5 +1,8 @@
 {{ config(materialized='table') }}
 
+---------------------------------------
+-- 1. BASE STOCK DATA
+---------------------------------------
 with base as (
     select
         f.date_key,
@@ -17,6 +20,9 @@ with base as (
         on f.stock_key = d.stock_key
 ),
 
+---------------------------------------
+-- 2. MOVING AVERAGES
+---------------------------------------
 ma as (
     select
         *,
@@ -35,6 +41,9 @@ ma as (
     from base
 ),
 
+---------------------------------------
+-- 3. VOLATILITY
+---------------------------------------
 vol as (
     select
         *,
@@ -45,6 +54,9 @@ vol as (
     from ma
 ),
 
+---------------------------------------
+-- 4. MACD
+---------------------------------------
 macd_calc as (
     select
         *,
@@ -66,6 +78,9 @@ macd as (
     from macd_calc
 ),
 
+---------------------------------------
+-- 5. RSI
+---------------------------------------
 rsi_calc as (
     select
         *,
@@ -100,11 +115,14 @@ rsi_final as (
         *,
         case
             when avg_loss = 0 then 100
-            else 100 - (100 / (1 + (avg_gain / nullif(avg_loss, 0))))
+            else 100 - (100 / (1 + (avg_gain / nullif(avg_loss,0))))
         end as rsi_14
     from rsi
 ),
 
+---------------------------------------
+-- 6. INDEX RETURNS (SPY)
+---------------------------------------
 index_returns as (
     select
         f.date_key,
@@ -116,33 +134,13 @@ index_returns as (
     where d.symbol = 'SPY'
 ),
 
+---------------------------------------
+-- 7. BETA
+---------------------------------------
 beta_calc as (
     select
         r.*,
-        i.index_return,
-        -- rolling sums for 20-day window
-        sum(r.daily_return) over (
-            partition by r.stock_key
-            order by r.date_key
-            rows between 19 preceding and current row
-        ) as sum_stock_ret_20,
-        sum(i.index_return) over (
-            order by r.date_key
-            rows between 19 preceding and current row
-        ) as sum_index_ret_20,
-        sum(r.daily_return * i.index_return) over (
-            partition by r.stock_key
-            order by r.date_key
-            rows between 19 preceding and current row
-        ) as sum_stock_index_ret_20,
-        sum(i.index_return * i.index_return) over (
-            order by r.date_key
-            rows between 19 preceding and current row
-        ) as sum_index_sq_20,
-        count(i.index_return) over (
-            order by r.date_key
-            rows between 19 preceding and current row
-        ) as n_obs_20
+        i.index_return
     from rsi_final r
     left join index_returns i
         on r.date_key = i.date_key
@@ -151,24 +149,24 @@ beta_calc as (
 beta as (
     select
         *,
-        case
-            when n_obs_20 >= 2
-                 and (sum_index_sq_20 - (sum_index_ret_20 * sum_index_ret_20) / n_obs_20) <> 0
-            then
-                (
-                    sum_stock_index_ret_20
-                    - (sum_stock_ret_20 * sum_index_ret_20) / n_obs_20
-                )
-                /
-                (
-                    sum_index_sq_20
-                    - (sum_index_ret_20 * sum_index_ret_20) / n_obs_20
-                )
-            else null
-        end as beta_20
+        covar_samp(daily_return, index_return) over (
+            partition by stock_key order by date_key
+            rows between 19 preceding and current row
+        )
+        /
+        nullif(
+            var_samp(index_return) over (
+                order by date_key
+                rows between 19 preceding and current row
+            ),
+            0
+        ) as beta_20
     from beta_calc
 ),
 
+---------------------------------------
+-- 8. RISK METRICS
+---------------------------------------
 risk as (
     select
         *,
@@ -184,6 +182,7 @@ risk as (
             ),
             0
         ) as sharpe_20,
+
         close_price /
         max(close_price) over (
             partition by stock_key order by date_key
@@ -192,6 +191,9 @@ risk as (
     from beta
 ),
 
+---------------------------------------
+-- 9. PRICE PATTERNS
+---------------------------------------
 patterns as (
     select
         *,
@@ -199,16 +201,19 @@ patterns as (
             partition by stock_key order by date_key
             rows between 19 preceding and current row
         ) as resistance_level,
+
         min(low_price) over (
             partition by stock_key order by date_key
             rows between 19 preceding and current row
         ) as support_level,
+
         case when close_price >
             max(high_price) over (
                 partition by stock_key order by date_key
                 rows between 19 preceding and current row
             )
         then true else false end as breakout_signal,
+
         case
             when ma_5 > ma_20 then 'Uptrend'
             when ma_5 < ma_20 then 'Downtrend'
@@ -217,16 +222,158 @@ patterns as (
     from risk
 ),
 
+---------------------------------------
+-- 10. PERFORMANCE METRICS
+---------------------------------------
 perf as (
     select
         p.*,
-        -- 20-day rolling return
         (p.close_price /
          lag(p.close_price, 20) over (partition by p.stock_key order by p.date_key)
         ) - 1 as rolling_return_20,
-        -- cumulative return from first date
+
         (p.close_price /
          first_value(p.close_price) over (partition by p.stock_key order by p.date_key)
         ) - 1 as cumulative_return,
-        -- index rolling return (20-day)
-        (
+
+        (i.index_close /
+         lag(i.index_close, 20) over (order by p.date_key)
+        ) - 1 as index_rolling_return_20
+    from patterns p
+    left join index_returns i
+        on p.date_key = i.date_key
+),
+
+---------------------------------------
+-- 11. NEWS FEATURES
+---------------------------------------
+news_base as (
+    select
+        to_number(to_char(datetime, 'YYYYMMDD')) as date_key,
+        related as symbol,
+        count(*) as news_count
+    from {{ ref('DIM_NEWS_BAE_G') }}
+    where related is not null
+    group by 1, 2
+),
+
+news_stats as (
+    select
+        *,
+        avg(news_count) over (
+            partition by symbol order by date_key
+            rows between 20 preceding and current row
+        ) as avg_news_20,
+        stddev(news_count) over (
+            partition by symbol order by date_key
+            rows between 20 preceding and current row
+        ) as std_news_20
+    from news_base
+),
+
+news_z as (
+    select
+        *,
+        (news_count - avg_news_20) / nullif(std_news_20, 0) as news_zscore_20
+    from news_stats
+),
+
+volume_stats as (
+    select
+        f.date_key,
+        d.symbol,
+        f.volume,
+        avg(f.volume) over (
+            partition by d.symbol order by f.date_key
+            rows between 20 preceding and current row
+        ) as avg_volume_20,
+        stddev(f.volume) over (
+            partition by d.symbol order by f.date_key
+            rows between 20 preceding and current row
+        ) as std_volume_20
+    from {{ ref('FACT_STOCK_BAE_G') }} f
+    join {{ ref('DIM_STOCK_BAE_G') }} d
+        on f.stock_key = d.stock_key
+),
+
+volume_z as (
+    select
+        *,
+        (volume - avg_volume_20) / nullif(std_volume_20, 0) as volume_zscore_20
+    from volume_stats
+),
+
+news_joined as (
+    select
+        n.date_key,
+        n.symbol,
+        n.news_count,
+        n.news_zscore_20,
+        v.volume_zscore_20,
+        (n.news_zscore_20 - v.volume_zscore_20) as news_vs_volume_zscore,
+        corr(n.news_count, v.volume) over (
+            partition by n.symbol order by n.date_key
+            rows between 20 preceding and current row
+        ) as vol_news_corr_20
+    from news_z n
+    left join volume_z v
+        on n.date_key = v.date_key
+        and n.symbol = v.symbol
+),
+
+---------------------------------------
+-- 12. MERGE STOCK + NEWS
+---------------------------------------
+merged as (
+    select
+        p.*,
+        n.news_count,
+        n.news_zscore_20,
+        n.volume_zscore_20,
+        n.news_vs_volume_zscore,
+        n.vol_news_corr_20
+    from perf p
+    left join news_joined n
+        on p.date_key = n.date_key
+        and p.symbol = n.symbol
+),
+
+---------------------------------------
+-- 13. SCORING
+---------------------------------------
+scored as (
+    select
+        *,
+        0
+        + case when trend_direction = 'Uptrend' then 10 else 0 end
+        + case when close_price > ma_50 then 10 else 0 end
+        + case when macd_line > 0 then 10 else 0 end
+        + case when rsi_14 between 50 and 65 then 10 else 0 end
+        + case when breakout_signal then 10 else 0 end
+        + case when rolling_return_20 > index_rolling_return_20 then 10 else 0 end
+        + case when sharpe_20 > 1 then 10 else 0 end
+        + case when drawdown > -0.10 then 10 else 0 end
+        + case when beta_20 between 0 and 1.5 then 10 else 0 end
+        + case when news_zscore_20 > 1 then 5 else 0 end
+        + case when volume_zscore_20 > 1 then 5 else 0 end
+        as score
+    from merged
+),
+
+---------------------------------------
+-- 14. FINAL OUTPUT
+---------------------------------------
+final as (
+    select
+        *,
+        case
+            when score >= 70 then 'BUY'
+            when score >= 40 then 'HOLD'
+            else 'SELL'
+        end as recommendation
+    from scored
+)
+
+select *
+from final
+order by stock_key, date_key;
