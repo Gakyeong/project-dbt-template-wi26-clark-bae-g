@@ -2,10 +2,10 @@
 
 with src as (
     select
-        to_number(to_char(to_date(date), 'YYYYMMDD')) as date_key,
+        to_number(to_char(to_date(raw_date), 'YYYYMMDD')) as date_key,
         city
     from {{ ref('raw_weather') }}
-    where date is not null
+    where raw_date is not null
 ),
 
 dim as (
