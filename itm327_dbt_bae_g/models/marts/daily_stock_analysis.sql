@@ -91,7 +91,7 @@ scored as (
         + case when volume_zscore_20 > 1 then 5 else 0 end
         as score
     from merged
-)
+),
 
 select
     *,

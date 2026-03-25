@@ -68,7 +68,7 @@ rsi as (
         avg(gain) over (partition by symbol order by date_key rows between 13 preceding and current row) as avg_gain,
         avg(loss) over (partition by symbol order by date_key rows between 13 preceding and current row) as avg_loss
     from rsi_diff
-)
+),
 
 select
     *,

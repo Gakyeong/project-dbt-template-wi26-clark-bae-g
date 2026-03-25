@@ -372,7 +372,7 @@ final as (
             else 'SELL'
         end as recommendation
     from scored
-)
+),
 
 select *
 from final
