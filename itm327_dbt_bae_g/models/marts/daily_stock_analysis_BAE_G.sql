@@ -1,8 +1,5 @@
 {{ config(materialized='table') }}
 
----------------------------------------
--- 1. BASE STOCK DATA
----------------------------------------
 with base as (
     select
         f.date_key,
@@ -20,9 +17,7 @@ with base as (
         on f.stock_key = d.stock_key
 ),
 
----------------------------------------
--- 2. MOVING AVERAGES
----------------------------------------
+
 ma as (
     select
         *,
@@ -41,9 +36,7 @@ ma as (
     from base
 ),
 
----------------------------------------
--- 3. VOLATILITY
----------------------------------------
+
 vol as (
     select
         *,
@@ -54,9 +47,7 @@ vol as (
     from ma
 ),
 
----------------------------------------
--- 4. MACD
----------------------------------------
+
 macd_calc as (
     select
         *,
@@ -78,9 +69,7 @@ macd as (
     from macd_calc
 ),
 
----------------------------------------
--- 5. RSI
----------------------------------------
+
 rsi_calc as (
     select
         *,
@@ -120,9 +109,7 @@ rsi_final as (
     from rsi
 ),
 
----------------------------------------
--- 6. INDEX RETURNS (SPY)
----------------------------------------
+
 index_returns as (
     select
         f.date_key,
@@ -134,9 +121,7 @@ index_returns as (
     where d.symbol = 'SPY'
 ),
 
----------------------------------------
--- 7. BETA
----------------------------------------
+
 beta_calc as (
     select
         r.*,
@@ -164,9 +149,7 @@ beta as (
     from beta_calc
 ),
 
----------------------------------------
--- 8. RISK METRICS
----------------------------------------
+
 risk as (
     select
         *,
@@ -191,9 +174,6 @@ risk as (
     from beta
 ),
 
----------------------------------------
--- 9. PRICE PATTERNS
----------------------------------------
 patterns as (
     select
         *,
@@ -222,9 +202,6 @@ patterns as (
     from risk
 ),
 
----------------------------------------
--- 10. PERFORMANCE METRICS
----------------------------------------
 perf as (
     select
         p.*,
@@ -244,9 +221,6 @@ perf as (
         on p.date_key = i.date_key
 ),
 
----------------------------------------
--- 11. NEWS FEATURES
----------------------------------------
 news_base as (
     select
         to_number(to_char(datetime, 'YYYYMMDD')) as date_key,
@@ -321,9 +295,7 @@ news_joined as (
         and n.symbol = v.symbol
 ),
 
----------------------------------------
--- 12. MERGE STOCK + NEWS
----------------------------------------
+
 merged as (
     select
         p.*,
@@ -338,9 +310,7 @@ merged as (
         and p.symbol = n.symbol
 ),
 
----------------------------------------
--- 13. SCORING
----------------------------------------
+
 scored as (
     select
         *,
@@ -360,9 +330,7 @@ scored as (
     from merged
 ),
 
----------------------------------------
--- 14. FINAL OUTPUT
----------------------------------------
+
 final as (
     select
         *,
@@ -372,7 +340,7 @@ final as (
             else 'SELL'
         end as recommendation
     from scored
-),
+)
 
 select *
 from final

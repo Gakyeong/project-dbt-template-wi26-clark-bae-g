@@ -42,7 +42,7 @@ volume_z as (
         *,
         (volume - avg_volume_20) / nullif(std_volume_20, 0) as volume_zscore_20
     from volume_stats
-),
+)
 
 select
     n.date_key,

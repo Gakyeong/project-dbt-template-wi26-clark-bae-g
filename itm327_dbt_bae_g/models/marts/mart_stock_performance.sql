@@ -24,7 +24,7 @@ index_returns as (
     join {{ ref('DIM_STOCK_BAE_G') }} d
         on f.stock_key = d.stock_key
     where d.symbol = 'SPY'
-),
+)
 
 select
     p.*,

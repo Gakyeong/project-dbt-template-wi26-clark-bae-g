@@ -32,7 +32,7 @@ beta as (
             0
         ) as beta_20
     from joined
-),
+)
 
 select
     *,
